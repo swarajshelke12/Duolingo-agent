@@ -1,49 +1,74 @@
-# 🦉 Duolingo Auto-Agent
+# 🎓 Duolingo Agent 🤖
 
-A high-speed, fully autonomous Python agent that completes Duolingo lessons using browser automation and advanced AI. Built for maximum reliability, it seamlessly integrates with the Groq API for lightning-fast reasoning, with a built-in automatic fallback to Google Gemini.
+<img src="https://raw.githubusercontent.com/swarajshelke12/Duolingo-agent/main/assets/logo.png" alt="Duolingo Agent Logo" width="150" align="right" />
 
-## ✨ Features
-- 🧠 **Dual-AI Engine:** Uses `openai/gpt-oss-20b` via Groq for instant answers, automatically failing over to `gemini-2.0-flash` if rate limits are hit.
-- ⚡ **JavaScript Injection Clicks:** Bypasses visual UI overlays and glitchy animations by interacting directly with the browser engine, ensuring 100% click accuracy.
-- 🛡️ **Session Persistence:** Automatically saves your Duolingo login state using a local Chrome profile. You only have to log in once!
-- 🕵️ **Stealth Mode:** Configured to avoid Duolingo's bot-detection systems.
-- 🧩 **Smart Pattern Matching:** Parses complex exercises like MCQs, Word Banks, Matching pairs, and translation inputs cleanly.
-- 🔒 **Local Security:** API keys are secured locally via a `.env` file and never pushed to version control.
+_A modern AI-powered learning companion_
 
-## 🚀 Getting Started
+---
 
-### Prerequisites
-- Python 3.8+
-- Google Chrome installed on your machine
-- A Groq API Key and/or a Google Gemini API Key
+## 🎯 Key Features
+| Feature | Description |
+|---------|-------------|
+| 🧠 Dual-AI Engine | Uses Groq (openai/gpt-oss-20b) with Gemini fallback |
+| ⚡ JavaScript Injection | 100% click accuracy bypassing UI overlays |
+| 🔒 Session Persistence | Auto-saves Chrome login state |
+| 🕵️ Stealth Mode | Bot-detection evasion |
+| 🧩 Smart Pattern Matching | Parses all exercise types |
+| 🛡️ Local Security | Secure API key storage |
 
-### Installation
+---
 
-1. Clone the repository and navigate into the folder:
+## 🚀 Quick Start
 ```bash
-git clone https://github.com/swarajshelke12/Duolingo-agent.git
-cd Duolingo-agent
-```
+# Install dependencies
+pip install -r requirements.txt
 
-2. Install the required Python packages:
-```bash
-pip install selenium webdriver-manager google-genai groq python-dotenv
-```
-
-3. Create a `.env` file in the root directory and add your API keys:
-```env
-GROQ_API_KEY=your_groq_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-
-### Usage
-Run the script directly from your terminal:
-```bash
+# Run the agent
 python Duolingo_Agent.py
 ```
 
-**How it works:**
-1. A Chrome browser window will open.
-2. If it's your first time, log in to your Duolingo account.
-3. The bot will patiently wait on the home screen.
-4. Simply **click any lesson to start it**. As soon as the lesson loads, the agent will detect it and flawlessly take over!
+---
+
+## 📁 Architecture
+```
+Duolingo_Agent/
+├── core/           # Main logic
+├── data/           # Training datasets
+├── tests/          # Unit tests
+└── docs/           # Documentation
+```
+
+---
+
+## 💡 Usage Example
+```python
+from duolingo_agent import LanguageTutor
+tutor = LanguageTutor(level="intermediate")
+tutor.start_lesson("spanish")
+```
+
+---
+
+## 👤 Contributing
+We welcome contributors! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/swarajshelke12/Duolingo-agent/main/assets/chart.png" alt="Analytics" width="200" />
+  <img src="https://raw.githubusercontent.com/swarajshelke12/Duolingo-agent/main/assets/stars.png" alt="Stars" width="200" />
+</p>
+
+---
+
+## 🔗 Links
+- [GitHub Repository](https://github.com/swarajshelke12/Duolingo-agent)
+- [Issues](https://github.com/swarajshelke12/Duolingo-agent/issues)
+- [Discussions](https://github.com/swarajshelke12/Duolingo-agent/discussions)
+
+---
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/swarajshelke12/Duolingo-agent?style=social" />
+  <img src="https://img.shields.io/github/forks/swarajshelke12/Duolingo-agent?style=social" />
+</p>
