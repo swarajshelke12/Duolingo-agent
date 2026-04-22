@@ -149,31 +149,35 @@ class DuolingoAgent:
     def get_challenge_data(self):
         """Extracts question and options from the current challenge"""
         try:
-            # Detect Challenge Type
+            # Detect Challenge Node and Type
             challenge_type = "unknown"
             try:
                 challenge_node = self.driver.find_element(By.CSS_SELECTOR, "[data-test^='challenge challenge-']")
                 c_type_raw = challenge_node.get_attribute("data-test")
                 challenge_type = c_type_raw.split(" ")[1].replace("challenge-", "")
             except:
-                pass
+                challenge_node = self.driver.find_element(By.TAG_NAME, "body")
 
             # Question text
             try:
-                question_header = self.driver.find_element(By.CSS_SELECTOR, "h1[data-test='challenge-header'], [data-test='challenge-header']").text
+                question_header = challenge_node.find_element(By.CSS_SELECTOR, "h1[data-test='challenge-header'], [data-test='challenge-header']").text
             except:
                 question_header = ""
 
             # Sub-question / Prompt
             try:
-                sub_question_elements = self.driver.find_elements(By.CSS_SELECTOR, "[data-test='challenge-secondary-prompt'], [data-test='hint-sentence'], [dir='ltr'] > span")
-                sub_question = " ".join([elem.text for elem in sub_question_elements if elem.text])
+                sub_question_elements = challenge_node.find_elements(By.CSS_SELECTOR, "[data-test='challenge-translate-prompt'], [data-test='challenge-listen-prompt'], [data-test='challenge-prompt'], [data-test='hint-sentence'], [data-test='challenge-secondary-prompt'], [dir='ltr'] > span")
+                prompt_texts = []
+                for elem in sub_question_elements:
+                    if elem.text and elem.text != question_header and elem.text not in prompt_texts:
+                        prompt_texts.append(elem.text)
+                sub_question = " ".join(prompt_texts)
             except:
                 sub_question = ""
 
             # Options (MCQ)
             options = []
-            option_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[data-test='challenge-choice']")
+            option_elements = challenge_node.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[data-test='challenge-choice']")
             for opt in option_elements:
                 if opt.text:
                     clean_text = opt.text
@@ -181,26 +185,26 @@ class DuolingoAgent:
                         clean_text = clean_text.split('\n', 1)[-1]
                     options.append(clean_text)
 
-            # Word Bank Tiles
-            tiles = []
-            tile_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='word-bank'] button[data-test='challenge-tap-token'], button[data-test='word-bank-tile']")
-            for tile in tile_elements:
-                if tile.text and tile.is_enabled():
-                    tiles.append(tile.text)
-
             # Match tokens (matching pairs)
             match_tokens = []
             if challenge_type == "match":
-                match_elements = self.driver.find_elements(By.CSS_SELECTOR, "button[data-test='challenge-tap-token']")
+                match_elements = challenge_node.find_elements(By.CSS_SELECTOR, "button[data-test='challenge-tap-token']")
                 for match in match_elements:
                     if match.text and match.is_enabled():
                          match_tokens.append(match.text)
                 tiles = [] # Clear tiles so it doesn't get confused with wordbank
+            else:
+                # Word Bank Tiles
+                tiles = []
+                tile_elements = challenge_node.find_elements(By.CSS_SELECTOR, "button[data-test='challenge-tap-token'], button[data-test='word-bank-tile']")
+                for tile in tile_elements:
+                    if tile.text and tile.is_enabled():
+                        tiles.append(tile.text)
                 
             # Typing textarea
             is_typing = False
             try:
-                typing_box = self.driver.find_element(By.CSS_SELECTOR, "textarea[data-test='challenge-translate-input'], input[data-test='challenge-text-input']")
+                typing_box = challenge_node.find_element(By.CSS_SELECTOR, "textarea[data-test='challenge-translate-input'], input[data-test='challenge-text-input']")
                 if typing_box.is_displayed():
                     is_typing = True
             except:
@@ -211,9 +215,9 @@ class DuolingoAgent:
                 determined_type = "match"
             elif is_typing:
                 determined_type = "typing"
-            elif tiles:
+            elif len(tiles) > 0:
                 determined_type = "wordbank"
-            elif options:
+            elif len(options) > 0:
                 determined_type = "mcq"
 
             return {
@@ -403,6 +407,12 @@ class DuolingoAgent:
                             
                         clicked = False
                         option_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[data-test='challenge-choice']")
+                        # Filter option elements to those inside the challenge node to prevent clicking random page elements
+                        try:
+                            challenge_node = self.driver.find_element(By.CSS_SELECTOR, "[data-test^='challenge challenge-']")
+                            option_elements = challenge_node.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[data-test='challenge-choice']")
+                        except:
+                            pass
                         for opt_elem in option_elements:
                             opt_text = opt_elem.text
                             if '\n' in opt_text: opt_text = opt_text.split('\n', 1)[-1]
@@ -448,7 +458,7 @@ class DuolingoAgent:
                         clicked_elements = set()
                         for a_tile in answer_tiles:
                             a_tile_clean = str(a_tile).lower().strip()
-                            tile_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='word-bank'] button[data-test='challenge-tap-token'], button[data-test='word-bank-tile']")
+                            tile_elements = self.driver.find_elements(By.CSS_SELECTOR, "button[data-test='challenge-tap-token'], button[data-test='word-bank-tile']")
                             for t_elem in tile_elements:
                                 if t_elem not in clicked_elements and t_elem.text.lower().strip() == a_tile_clean and t_elem.is_enabled() and "_1yW_Y" not in t_elem.get_attribute("class"):
                                     self.driver.execute_script("arguments[0].click();", t_elem)
