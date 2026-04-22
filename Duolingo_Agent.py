@@ -4,6 +4,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
@@ -85,33 +86,61 @@ class DuolingoAgent:
                 "button[data-test='start-button']",
                 "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start')]",
                 "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'practice')]",
-                "//div[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start')]",
-                "//div[@role='button']"
+                "//div[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start')]"
             ]
+            
+            clicked = False
             for selector in selectors:
                 try:
                     if selector.startswith("//"):
-                        elem = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                        elements = self.driver.find_elements(By.XPATH, selector)
                     else:
-                        elem = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     
-                    if elem.is_displayed():
-                        elem.click()
-                        self.log(f"Clicked Start using {selector}")
-                        time.sleep(2)
-                        
-                        # Sometimes we click a node and another start button pops up
-                        try:
-                            start_popup = self.driver.find_element(By.XPATH, "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start')]")
-                            start_popup.click()
+                    for elem in elements:
+                        if elem.is_displayed() and elem.is_enabled():
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
+                            time.sleep(0.5)
+                            self.driver.execute_script("arguments[0].click();", elem)
+                            self.log(f"Clicked Start using {selector}")
                             time.sleep(2)
-                        except:
-                            pass
-                            
-                        return True
+                            clicked = True
+                            break
+                    if clicked:
+                        break
                 except:
                     continue
             
+            if clicked:
+                # Sometimes we click a node and another start button pops up
+                try:
+                    start_popup = self.driver.find_elements(By.XPATH, "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start')]")
+                    for p in start_popup:
+                        if p.is_displayed():
+                            self.driver.execute_script("arguments[0].click();", p)
+                            time.sleep(2)
+                            break
+                except:
+                    pass
+                return True
+                
+            # Fallback: try to click skill nodes
+            try:
+                nodes = self.driver.find_elements(By.CSS_SELECTOR, "div[role='button']")
+                for n in nodes:
+                    if n.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", n)
+                        time.sleep(0.5)
+                        
+                        start_popup = self.driver.find_elements(By.XPATH, "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'start')]")
+                        for p in start_popup:
+                            if p.is_displayed():
+                                self.driver.execute_script("arguments[0].click();", p)
+                                time.sleep(2)
+                                return True
+            except:
+                pass
+                
             return False
         except Exception as e:
             self.log(f"Error in start_lesson: {e}")
@@ -120,95 +149,123 @@ class DuolingoAgent:
     def get_challenge_data(self):
         """Extracts question and options from the current challenge"""
         try:
+            # Detect Challenge Type
+            challenge_type = "unknown"
+            try:
+                challenge_node = self.driver.find_element(By.CSS_SELECTOR, "[data-test^='challenge challenge-']")
+                c_type_raw = challenge_node.get_attribute("data-test")
+                challenge_type = c_type_raw.split(" ")[1].replace("challenge-", "")
+            except:
+                pass
+
             # Question text
             try:
                 question_header = self.driver.find_element(By.CSS_SELECTOR, "h1[data-test='challenge-header'], [data-test='challenge-header']").text
             except:
-                question_header = "Translate this sentence" # Fallback
+                question_header = ""
 
             # Sub-question / Prompt
             try:
-                sub_question = self.driver.find_element(By.CSS_SELECTOR, "[data-test='challenge-secondary-prompt'], [data-test='hint-sentence']").text
+                sub_question_elements = self.driver.find_elements(By.CSS_SELECTOR, "[data-test='challenge-secondary-prompt'], [data-test='hint-sentence'], [dir='ltr'] > span")
+                sub_question = " ".join([elem.text for elem in sub_question_elements if elem.text])
             except:
                 sub_question = ""
 
-            # Options (MCQ or Fill in the blanks)
+            # Options (MCQ)
             options = []
-            option_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[class*='_3fmUm']")
+            option_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[data-test='challenge-choice']")
             for opt in option_elements:
                 if opt.text:
-                    options.append(opt.text)
+                    clean_text = opt.text
+                    if '\n' in clean_text:
+                        clean_text = clean_text.split('\n', 1)[-1]
+                    options.append(clean_text)
 
             # Word Bank Tiles
             tiles = []
-            tile_elements = self.driver.find_elements(By.CSS_SELECTOR, "button[data-test='word-bank-tile'], [data-test='challenge-tap-token']")
+            tile_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='word-bank'] button[data-test='challenge-tap-token'], button[data-test='word-bank-tile']")
             for tile in tile_elements:
                 if tile.text and tile.is_enabled():
                     tiles.append(tile.text)
+
+            # Match tokens (matching pairs)
+            match_tokens = []
+            if challenge_type == "match":
+                match_elements = self.driver.find_elements(By.CSS_SELECTOR, "button[data-test='challenge-tap-token']")
+                for match in match_elements:
+                    if match.text and match.is_enabled():
+                         match_tokens.append(match.text)
+                tiles = [] # Clear tiles so it doesn't get confused with wordbank
+                
+            # Typing textarea
+            is_typing = False
+            try:
+                typing_box = self.driver.find_element(By.CSS_SELECTOR, "textarea[data-test='challenge-translate-input'], input[data-test='challenge-text-input']")
+                if typing_box.is_displayed():
+                    is_typing = True
+            except:
+                pass
+
+            determined_type = "unknown"
+            if challenge_type == "match":
+                determined_type = "match"
+            elif is_typing:
+                determined_type = "typing"
+            elif tiles:
+                determined_type = "wordbank"
+            elif options:
+                determined_type = "mcq"
 
             return {
                 "header": question_header,
                 "prompt": sub_question,
                 "options": options,
                 "tiles": tiles,
-                "type": "mcq" if options else ("wordbank" if tiles else "typing")
+                "match_tokens": match_tokens,
+                "type": determined_type,
+                "raw_type": challenge_type
             }
         except Exception as e:
-            # self.log(f"Error extracting challenge data: {e}")
+            self.log(f"Error extracting challenge data: {e}")
             return None
 
     def solve_with_ai(self, data):
-        if not self.api_key:
+        if not self.api_key and not self.groq_api_key:
             return None
             
         prompt = f"""
-        You are a Duolingo expert. Solve the following language challenge.
-        Question: {data['header']}
-        Prompt: {data['prompt']}
-        Options: {data['options']}
-        Word Bank: {data['tiles']}
+        You are an expert Duolingo solver. Output ONLY valid JSON, with no other text or explanation. 
+        Solve the following language challenge with maximum accuracy. CAREFULLY infer the target language and source language based on the words.
+        Challenge Type: {data.get('raw_type', 'unknown')}
+        Question Header: {data.get('header', '')}
+        Prompt/Context: {data.get('prompt', '')}
+        Options (MCQ): {data.get('options', [])}
+        Word Bank (Tiles): {data.get('tiles', [])}
+        Match Tokens: {data.get('match_tokens', [])}
+        Determined format: {data.get('type', 'unknown')}
         
         Instructions:
-        - If it's MCQ, return ONLY the EXACT text of the correct option.
-        - If it's Word Bank, return the tiles in the correct order, separated by a single space.
-        - If it's a Matching exercise (pairs), return the pairs sequentially (word1 translation1 word2 translation2).
-        - If it's Typing, return the correct translation.
+        - If format is 'mcq', the "answer" field should be the EXACT text of the correct option from the Options list.
+        - If format is 'wordbank', the "answer" field should be a list of strings. YOU MUST USE EXACTLY THE STRINGS FROM THE PROVIDED 'Word Bank (Tiles)' ARRAY. Do not alter capitalization or punctuation. The strings must perfectly match the elements in the provided tiles list.
+        - If format is 'match', the "answer" field should be a list of lists, where each sublist contains the pair of matching tokens (e.g. [["Word1", "Translation1"], ["Word2", "Translation2"]]). Use EXACT tokens from the Match Tokens array.
+        - If format is 'typing', the "answer" field should be the correct translated text to be typed.
         
-        Return ONLY the answer text, no conversational filler, no labels.
+        JSON schema:
+        {{
+            "answer": <String, or List of Strings, or List of Lists based on format instructions above>
+        }}
         """
-        
         
         if self.groq_client:
             # Try Groq API first
             try:
-                try:
-                    completion = self.groq_client.chat.completions.create(
-                        messages=[{"role": "user", "content": prompt}],
-                        model="openai/gpt-oss-20b",
-                        temperature=1,
-                        max_completion_tokens=500,
-                        top_p=1,
-                        reasoning_effort="medium",
-                        stream=True,
-                        stop=None
-                    )
-                    
-                    answer_text = ""
-                    for chunk in completion:
-                        content = chunk.choices[0].delta.content or ""
-                        answer_text += content
-                    
-                    return answer_text.strip()
-                except Exception as inner_e:
-                    if "not found" in str(inner_e).lower() or "invalid" in str(inner_e).lower():
-                        self.log("Requested model not found, falling back to llama-3.3-70b-versatile...")
-                        chat_completion = self.groq_client.chat.completions.create(
-                            messages=[{"role": "user", "content": prompt}],
-                            model="llama-3.3-70b-versatile"
-                        )
-                        return chat_completion.choices[0].message.content.strip()
-                    else:
-                        raise inner_e
+                chat_completion = self.groq_client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="llama-3.3-70b-versatile",
+                    temperature=0.1,
+                    response_format={"type": "json_object"}
+                )
+                return chat_completion.choices[0].message.content.strip()
             except Exception as e:
                 error_str = str(e)
                 self.log(f"Primary API Error: {error_str}. Falling back to Gemini...")
@@ -234,9 +291,10 @@ class DuolingoAgent:
         return None
 
     def run_automation(self):
-        self.log("Starting automation loop...")
+        self.log("Starting reliable automation loop...")
         last_prompt = None
         last_answer = None
+        consecutive_failures = 0
         
         while True:
             try:
@@ -247,18 +305,36 @@ class DuolingoAgent:
                 if "xp-summary" in self.driver.current_url:
                     self.log("On XP summary screen.")
                     try:
-                        final_btn = self.driver.find_element(By.XPATH, "//button[contains(text(), 'Continue')]")
+                        final_btn = self.driver.find_element(By.XPATH, "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'continue')]")
                         final_btn.click()
-                        time.sleep(0.5)
+                        time.sleep(2)
                     except:
                         pass
+                
+                # Skip listening/speaking if possible
+                try:
+                    skip_listen = self.driver.find_elements(By.XPATH, "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'can') and contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'listen')]")
+                    for btn in skip_listen:
+                        if btn.is_displayed():
+                            self.driver.execute_script("arguments[0].click();", btn)
+                            self.log("Skipped listening challenge.")
+                            time.sleep(1)
+                            break
+                    skip_speak = self.driver.find_elements(By.XPATH, "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'can') and contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'speak')]")
+                    for btn in skip_speak:
+                        if btn.is_displayed():
+                            self.driver.execute_script("arguments[0].click();", btn)
+                            self.log("Skipped speaking challenge.")
+                            time.sleep(1)
+                            break
+                except:
+                    pass
                 
                 # Check for "Check", "Continue", "Next", "Got it" buttons
                 try:
                     next_selectors = [
                         "button[data-test='player-next']",
                         "//button[contains(text(), 'Continue')]",
-                        "//button[contains(text(), 'Check')]",
                         "//button[contains(text(), 'Next')]",
                         "//button[contains(text(), 'Got it')]"
                     ]
@@ -271,13 +347,12 @@ class DuolingoAgent:
                                 btn = self.driver.find_element(By.CSS_SELECTOR, sel)
                             
                             if btn.is_displayed() and btn.is_enabled():
-                                # Only click if it's "Continue" or if we've already answered
                                 btn_text = btn.text.lower()
                                 if "continue" in btn_text or "next" in btn_text or "got it" in btn_text:
                                     self.driver.execute_script("arguments[0].click();", btn)
                                     self.log(f"Clicked {btn_text}")
                                     btn_clicked = True
-                                    time.sleep(0.3)
+                                    time.sleep(2) # Add delay for reliability
                                     break
                         except:
                             continue
@@ -287,77 +362,168 @@ class DuolingoAgent:
 
                 # Handle Challenge
                 data = self.get_challenge_data()
-                if data and data['header']:
-                    current_prompt = data.get('prompt', '')
+                if data and (data.get('header') or data.get('prompt') or data.get('options') or data.get('tiles') or data.get('match_tokens')):
+                    current_prompt = data.get('prompt', '') + str(data.get('options', [])) + str(data.get('tiles', []))
                     
                     if current_prompt != last_prompt or not last_answer:
-                        self.log(f"Challenge: {data['header']}")
+                        self.log(f"Challenge Type: {data.get('type')}")
+                        self.log(f"Question: {data.get('header')} - {data.get('prompt')}")
+                        time.sleep(1) # Human-like reading delay
+                        
                         answer = self.solve_with_ai(data)
                         if answer:
                             self.log(f"AI Answer: {answer}")
                             last_prompt = current_prompt
                             last_answer = answer
+                            consecutive_failures = 0
                         else:
                             last_answer = None
+                            consecutive_failures += 1
                     else:
                         # Use cached answer
                         answer = last_answer
                     
                     if not answer:
-                        time.sleep(1)
+                        if consecutive_failures > 3:
+                            self.log("Multiple failures to get AI answer. Waiting 10s...")
+                            time.sleep(10)
+                        else:
+                            time.sleep(2)
                         continue
                         
                     if data['type'] == "mcq":
-                        # Find and click the option with matching text
+                        import json
+                        try:
+                            parsed_ans = json.loads(answer)
+                            clean_ans = parsed_ans.get("answer", answer)
+                            if isinstance(clean_ans, list): clean_ans = str(clean_ans)
+                            clean_ans = clean_ans.lower().strip()
+                        except:
+                            clean_ans = answer.lower().strip()
+                            
                         clicked = False
-                        option_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[class*='_3fmUm']")
+                        option_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='challenge-choice'], [role='radio'], button[data-test='challenge-choice']")
                         for opt_elem in option_elements:
-                            opt_text = opt_elem.text.lower().strip()
-                            if len(opt_text) > 0 and (opt_text in answer.lower() or answer.lower() in opt_text):
+                            opt_text = opt_elem.text
+                            if '\n' in opt_text: opt_text = opt_text.split('\n', 1)[-1]
+                            opt_text = opt_text.lower().strip()
+                            
+                            if len(opt_text) > 0 and (opt_text == clean_ans or clean_ans in opt_text):
                                 self.driver.execute_script("arguments[0].click();", opt_elem)
                                 clicked = True
+                                self.log(f"Selected option: {opt_text}")
+                                time.sleep(0.5)
                                 break
-                        if not clicked and option_elements:
-                            self.driver.execute_script("arguments[0].click();", option_elements[0]) # Fallback to first if AI fails
-                    
+                        if not clicked:
+                            # Try partial match word by word
+                            for opt_elem in option_elements:
+                                opt_text = opt_elem.text
+                                if '\n' in opt_text: opt_text = opt_text.split('\n', 1)[-1]
+                                opt_text = opt_text.lower().strip()
+                                
+                                # Use regex-like splitting to avoid empty words and check overlap
+                                ans_words = [w for w in clean_ans.split() if len(w) > 2]
+                                if len(ans_words) > 0 and any(word in opt_text for word in ans_words):
+                                    self.driver.execute_script("arguments[0].click();", opt_elem)
+                                    clicked = True
+                                    self.log(f"Selected option via partial match: {opt_text}")
+                                    time.sleep(0.5)
+                                    break
+                        if not clicked:
+                            self.log("Failed to confidently match MCQ option. Retrying next loop.")
+                            last_answer = None # Force re-evaluation
+                            time.sleep(1)
+                            continue
+                            
                     elif data['type'] == "wordbank":
-                        import re
-                        answer_clean = re.sub(r'[^\w\s]', '', answer).lower()
-                        answer_tiles = answer_clean.split()
-                        
+                        import json
+                        try:
+                            parsed_ans = json.loads(answer)
+                            answer_tiles = parsed_ans.get("answer", [])
+                            if isinstance(answer_tiles, str):
+                                answer_tiles = answer_tiles.split()
+                        except:
+                            answer_tiles = answer.strip().split()
+                            
                         clicked_elements = set()
                         for a_tile in answer_tiles:
-                            tile_elements = self.driver.find_elements(By.CSS_SELECTOR, "button[data-test='word-bank-tile'], [data-test='challenge-tap-token']")
+                            a_tile_clean = str(a_tile).lower().strip()
+                            tile_elements = self.driver.find_elements(By.CSS_SELECTOR, "div[data-test='word-bank'] button[data-test='challenge-tap-token'], button[data-test='word-bank-tile']")
                             for t_elem in tile_elements:
-                                if t_elem not in clicked_elements and t_elem.text.lower() == a_tile and t_elem.is_enabled() and "_1yW_Y" not in t_elem.get_attribute("class"):
+                                if t_elem not in clicked_elements and t_elem.text.lower().strip() == a_tile_clean and t_elem.is_enabled() and "_1yW_Y" not in t_elem.get_attribute("class"):
                                     self.driver.execute_script("arguments[0].click();", t_elem)
                                     clicked_elements.add(t_elem)
-                                    time.sleep(0.1)
+                                    time.sleep(0.15) # Faster delay
                                     break
-                    
+                                    
+                    elif data['type'] == "match":
+                        import json
+                        try:
+                            parsed_ans = json.loads(answer)
+                            pairs = parsed_ans.get("answer", [])
+                        except:
+                            pairs = []
+                            for line in answer.strip().split('\n'):
+                                tokens = line.split(',')
+                                if len(tokens) >= 2:
+                                    pairs.append([tokens[0], tokens[1]])
+                                    
+                        for pair in pairs:
+                            if len(pair) >= 2:
+                                t1 = str(pair[0]).strip().lower()
+                                t2 = str(pair[1]).strip().lower()
+                                
+                                match_elements = self.driver.find_elements(By.CSS_SELECTOR, "button[data-test='challenge-tap-token']")
+                                e1, e2 = None, None
+                                for m in match_elements:
+                                    m_text = m.text.lower().strip()
+                                    if m_text == t1 and not e1 and m.is_enabled() and "_1yW_Y" not in m.get_attribute("class"): e1 = m
+                                    elif m_text == t2 and not e2 and m.is_enabled() and "_1yW_Y" not in m.get_attribute("class"): e2 = m
+                                
+                                if e1 and e2:
+                                    self.driver.execute_script("arguments[0].click();", e1)
+                                    time.sleep(0.2)
+                                    self.driver.execute_script("arguments[0].click();", e2)
+                                    time.sleep(0.2)
+
                     elif data['type'] == "typing":
+                        import json
+                        try:
+                            parsed_ans = json.loads(answer)
+                            clean_ans = parsed_ans.get("answer", answer)
+                            if isinstance(clean_ans, list): clean_ans = " ".join(clean_ans)
+                        except:
+                            clean_ans = answer
+                            
                         try:
                             input_box = self.driver.find_element(By.CSS_SELECTOR, "textarea[data-test='challenge-translate-input'], input[data-test='challenge-text-input']")
-                            input_box.send_keys(answer)
-                        except:
+                            input_box.send_keys(Keys.CONTROL + "a")
+                            input_box.send_keys(Keys.DELETE)
+                            time.sleep(0.1)
+                            
+                            input_box.send_keys(str(clean_ans).strip())
+                            time.sleep(0.2)
+                        except Exception as e:
+                            self.log(f"Error typing answer: {e}")
                             pass
 
                     # Click Check
-                    time.sleep(0.2)
+                    time.sleep(1)
                     try:
                         check_btn = self.driver.find_element(By.XPATH, "//button[contains(text(), 'Check')] | //button[@data-test='player-next']")
                         self.driver.execute_script("arguments[0].click();", check_btn)
+                        self.log("Clicked Check")
                     except:
                         pass
                 
-                time.sleep(0.5)
+                time.sleep(1) # General loop delay
             except Exception as e:
                 self.log(f"Loop error: {e}")
-                time.sleep(0.5)
+                time.sleep(2)
 
 if __name__ == "__main__":
     print("="*50)
-    print(" Duolingo AI Agent (Fast Mode)")
+    print(" Duolingo AI Agent (Reliable & Accurate Mode)")
     print("="*50)
     
     # Load environment variables from .env file securely
@@ -380,9 +546,28 @@ if __name__ == "__main__":
     agent.wait_for_login()
     
     while True:
-        if any(keyword in agent.driver.current_url for keyword in ["lesson", "practice"]):
-            agent.log("Lesson detected! Taking over...")
-            agent.run_automation()
-        else:
-            agent.log("Waiting for a lesson to start... (Please click a lesson manually in the browser)")
-            time.sleep(3)
+        try:
+            if any(keyword in agent.driver.current_url for keyword in ["lesson", "practice"]):
+                agent.log("Lesson detected! Taking over...")
+                agent.run_automation()
+            else:
+                print("\n" + "="*50)
+                user_input = input("Press ENTER to start the next lesson automatically,\nor type 'q' to quit: ")
+                if user_input.lower() == 'q':
+                    print("Exiting...")
+                    agent.driver.quit()
+                    break
+                    
+                agent.log("Starting a new lesson...")
+                success = agent.start_lesson()
+                if not success:
+                    agent.log("Failed to start a lesson automatically. Please click the lesson manually, then the script will take over.")
+                
+                time.sleep(3)
+        except Exception as e:
+            if "invalid session id" in str(e).lower() or "disconnected" in str(e).lower():
+                print("Browser was closed or disconnected. Exiting script.")
+                break
+            else:
+                agent.log(f"Unexpected error in main loop: {e}")
+                time.sleep(3)
