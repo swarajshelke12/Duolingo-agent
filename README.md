@@ -6,7 +6,7 @@ _A premium automated language learning solution combining browser automation wit
 
 ---
 
-## 🌟 Features
+## 🌟Key Features
 | Feature | Status | Description |
 |----|--------|-------------|
 | 🧠 Dual-AI Engine |  🟢 Active | Groq + Gemini fallback |
