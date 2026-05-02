@@ -4,8 +4,6 @@
 
 _A premium automated language learning solution combining browser automation with advanced AI reasoning._
 
----
-
 ## 🌟Key Features
 | Feature | Status | Description |
 |----|--------|-------------|
@@ -26,7 +24,6 @@ pip install -r requirements.txt
 # Run the agent  
 python Duolingo_Agent.py
 ```
-
 ---
 
 ## 📦 Project Structure
