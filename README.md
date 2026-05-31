@@ -12,9 +12,9 @@
 [![License](https://img.shields.io/github/license/swarajshelke12/Duolingo-agent?style=for-the-badge)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/swarajshelke12/Duolingo-agent?style=for-the-badge&logo=github)](https://github.com/swarajshelke12/Duolingo-agent)
 
-**An autonomous AI agent that completes Duolingo lessons by combining browser automation with dual-LLM reasoning.**
+**A fully autonomous AI agent that completes Duolingo lessons -- zero human intervention required.**
 
-[Getting Started](#getting-started) | [How It Works](#how-it-works) | [Configuration](#configuration) | [Contributing](#contributing)
+[Getting Started](#getting-started) | [How It Works](#how-it-works) | [Architecture](#architecture) | [Configuration](#configuration) | [Contributing](#contributing)
 
 </div>
 
@@ -22,9 +22,9 @@
 
 ## Overview
 
-Duolingo Agent is a fully autonomous browser automation system that logs into your Duolingo account, detects language-learning challenges in real time, solves them using large language models, and submits the correct answers -- all without manual intervention.
+Duolingo Agent is an autonomous browser automation system powered by a dual-LLM architecture. It logs into your Duolingo account, detects every type of language challenge in real time, solves them using AI, and submits answers -- then automatically moves on to the next lesson. Continuously. Without you touching anything.
 
-It supports **every challenge type** Duolingo throws at you: multiple choice, word bank construction, free-form typing, and match-the-pairs exercises. The dual-AI architecture uses **Groq's LLaMA 3.3 70B** as the primary solver with **Google Gemini 2.0 Flash** as an automatic fallback, ensuring near-zero downtime even under rate limits.
+The v2 architecture is built as a modular Python package with a state machine orchestrator, 4-tier AI solving (cache, Groq, Gemini text, Gemini Vision), correction learning, and robust anti-detection.
 
 ---
 
@@ -34,46 +34,42 @@ It supports **every challenge type** Duolingo throws at you: multiple choice, wo
 <tr>
 <td width="50%">
 
-### Dual-AI Solver Engine
-Groq (LLaMA 3.3 70B Versatile) handles challenges at blazing speed. If a rate limit or error occurs, the system seamlessly falls back to Google Gemini 2.0 Flash -- no human intervention required.
+### Dual-AI Solver with Vision Fallback
+Groq LLaMA 3.3 70B solves challenges at blazing speed. If rate-limited, Gemini 2.0 Flash takes over. If DOM scraping fails entirely, Gemini Vision analyzes a screenshot of the page and solves it visually.
 
 </td>
 <td width="50%">
 
-### Complete Challenge Coverage
-Handles all four Duolingo challenge types out of the box:
-- **MCQ** -- Selects the correct option
-- **Word Bank** -- Taps tiles in the right order
-- **Typing** -- Types the translated answer
-- **Match Pairs** -- Clicks matching pairs
+### Every Challenge Type Handled
+MCQ, word bank, typing, match pairs, fill-in-the-blank, tap-to-complete, character select, listening (skip or solve), and speaking (auto-skip). If Duolingo adds a new type, the vision fallback catches it.
 
 </td>
 </tr>
 <tr>
+<td width="50%">
+
+### Correction Learning
+When the agent gets an answer wrong, it reads Duolingo's green correction banner, stores the correct answer in a local cache, and never makes the same mistake twice.
+
+</td>
+<td width="50%">
+
+### Continuous Autonomous Operation
+After completing a lesson, the agent automatically navigates back, finds the next lesson, and starts it. Set `--max-lessons 10` or let it run indefinitely.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### State Machine Architecture
+Eight clearly defined states (LOGIN, NAVIGATE, LESSON_START, CHALLENGE, SUBMIT, FEEDBACK, LESSON_END, DONE) with stuck detection, auto-recovery, and graceful error handling.
+
+</td>
 <td width="50%">
 
 ### Anti-Detection Stealth
-Disables automation flags, removes `navigator.webdriver` fingerprints, and uses a persistent Chrome profile to maintain session cookies. The agent mimics human timing with configurable delays.
-
-</td>
-<td width="50%">
-
-### Session Persistence
-Your login session survives across restarts. A local Chrome profile directory stores cookies and session data, so you log in once and the agent remembers you.
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Smart Challenge Detection
-A robust DOM scraper identifies challenge types by inspecting `data-test` attributes, prompt structures, and input elements. It distinguishes between MCQ, word bank, typing, and match challenges with high accuracy.
-
-</td>
-<td width="50%">
-
-### Graceful Error Recovery
-Built-in retry logic handles stale elements, rate limits, and unexpected page states. The agent pauses intelligently when APIs are throttled and resumes automatically.
+CDP-injected JavaScript removes `navigator.webdriver`, spoofs plugins and languages, disables automation flags, and uses a persistent Chrome profile for natural session cookies.
 
 </td>
 </tr>
@@ -89,20 +85,25 @@ Built-in retry logic handles stale elements, rate limits, and unexpected page st
 
 <br/>
 
-The system operates as a closed loop:
+The system is built as 7 specialized modules:
 
-```
-Login --> Challenge Detection --> AI Reasoning --> Answer Execution --> Check/Continue --> Repeat
-```
-
-| Component | Technology | Role |
+| Module | File | Responsibility |
 |---|---|---|
-| Browser Engine | Selenium + ChromeDriver | Navigates Duolingo, interacts with DOM elements |
-| Challenge Parser | Custom DOM Scraper | Extracts question, options, tiles, and input fields |
-| Primary AI | Groq (LLaMA 3.3 70B) | Solves challenges with structured JSON responses |
-| Fallback AI | Google Gemini 2.0 Flash | Activates when primary API is unavailable |
-| Anti-Detection | Chrome Options + JS Injection | Evades bot detection mechanisms |
-| Session Manager | Chrome Profile Directory | Persists login state across runs |
+| Config | `duolingo_agent/config.py` | Environment loading, API key validation, timing constants |
+| Logger | `duolingo_agent/logger.py` | Colored timestamped output, challenge statistics |
+| Browser | `duolingo_agent/browser.py` | Chrome setup, anti-detection, safe click/type, screenshots |
+| Parser | `duolingo_agent/challenges.py` | DOM scraping, challenge type detection, correction extraction |
+| Solver | `duolingo_agent/solver.py` | Dual-AI solving, vision fallback, correction cache |
+| Executor | `duolingo_agent/executor.py` | Answer submission for all challenge types |
+| Agent | `duolingo_agent/agent.py` | State machine orchestrator |
+
+### Solving Pipeline
+
+```
+Cache Lookup --> Groq LLaMA 3.3 70B --> Gemini 2.0 Flash (text) --> Gemini 2.0 Flash (vision/screenshot)
+```
+
+Each tier only activates if the previous one fails. The cache makes repeated challenges instant (zero API calls).
 
 ---
 
@@ -115,16 +116,18 @@ Login --> Challenge Detection --> AI Reasoning --> Answer Execution --> Check/Co
 <br/>
 
 **Step 1 -- Login.**
-The agent opens Duolingo's login page and waits for you to authenticate manually (first time only). Your session is saved to `chrome_profile/` for future runs.
+Opens Duolingo and waits for manual login (first time only). Session is persisted in `chrome_profile/` so subsequent runs are automatic.
 
 **Step 2 -- Detect.**
-Once inside a lesson, the challenge parser scans the DOM for `data-test` attributes to identify the challenge type and extract the question header, prompt text, answer options, word bank tiles, or match tokens.
+The challenge parser scans `data-test` attributes to identify 25+ challenge type variants and extracts headers, prompts, options, tiles, and tokens from the DOM.
 
 **Step 3 -- Solve.**
-The extracted challenge data is formatted into a structured prompt and sent to Groq's LLaMA 3.3 70B model (or Gemini as fallback). The AI returns a JSON response containing the exact answer.
+Challenge data is formatted into a type-specific prompt (MCQ, word bank, typing, match, fill-blank) and sent to the AI. Responses are structured JSON: `{"answer": <value>}`.
 
 **Step 4 -- Submit.**
-The answer executor maps the AI's response back to DOM elements using JavaScript injection for precise clicks. For typing challenges, it clears the input field and types the answer. Finally, it clicks "Check" and handles the continue/next flow.
+The executor maps answers back to DOM elements using JavaScript injection. For typing, it clears and fills the input. For MCQ, it uses 3-pass matching (exact, substring, word overlap). Then it clicks Check and processes feedback.
+
+**After each lesson**, the agent clicks through XP summaries and modals, navigates back, and auto-starts the next lesson.
 
 ---
 
@@ -132,92 +135,81 @@ The answer executor maps the AI's response back to DOM elements using JavaScript
 
 ### Prerequisites
 
-- **Python 3.8+** installed on your system
-- **Google Chrome** browser installed
+- **Python 3.8+**
+- **Google Chrome** browser
 - At least one API key:
-  - [Groq API Key](https://console.groq.com/keys) (recommended, free tier available)
-  - [Google Gemini API Key](https://aistudio.google.com/apikey) (fallback)
+  - [Groq API Key](https://console.groq.com/keys) -- primary, fast, free tier
+  - [Google Gemini API Key](https://aistudio.google.com/apikey) -- fallback + vision
 
 ### Installation
 
-**1. Clone the repository**
-
 ```bash
+# Clone
 git clone https://github.com/swarajshelke12/Duolingo-agent.git
 cd Duolingo-agent
-```
 
-**2. Create a virtual environment (recommended)**
-
-```bash
+# Virtual environment
 python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS/Linux
 
-# Windows
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-**3. Install dependencies**
+### Configure API Keys
 
 ```bash
-pip install selenium webdriver-manager google-genai groq
+# Copy the template
+cp .env.example .env
+
+# Edit .env and add your keys
 ```
-
-**4. Configure API keys**
-
-Create a `.env` file in the project root:
 
 ```env
 GROQ_API_KEY=your_groq_api_key_here
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-> You need at least one key. Both are recommended for maximum reliability.
-
-**5. Run the agent**
+### Run
 
 ```bash
-python Duolingo_Agent.py
+# Standard mode -- infinite lessons, fully autonomous
+python main.py
+
+# Run 5 lessons then stop
+python main.py --max-lessons 5
+
+# Headless mode (no visible browser)
+python main.py --headless
+
+# Wait for user input between lessons
+python main.py --no-auto-continue
+
+# All options
+python main.py --help
 ```
 
 ---
 
 ## Configuration
 
+### CLI Arguments
+
+| Flag | Default | Description |
+|---|---|---|
+| `--headless` | off | Run Chrome without a visible window |
+| `--max-lessons N` | 0 (infinite) | Stop after N lessons |
+| `--no-auto-continue` | off | Wait for ENTER between lessons |
+| `--browser-path PATH` | auto | Custom Chrome/Chromium binary path |
+| `--quiet` | off | Suppress debug log messages |
+
 ### Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `GROQ_API_KEY` | One of two | API key for Groq (primary AI engine) |
-| `GEMINI_API_KEY` | One of two | API key for Google Gemini (fallback AI engine) |
-
-### Constructor Parameters
-
-The `DuolingoAgent` class accepts the following parameters:
-
-```python
-agent = DuolingoAgent(
-    api_key="...",          # Gemini API key (or set via .env)
-    groq_api_key="...",     # Groq API key (or set via .env)
-    headless=False,         # Run Chrome in headless mode (no visible window)
-    browser_path=None       # Path to a custom Chrome/Chromium binary
-)
-```
-
-### Chrome Options (Pre-configured)
-
-The agent automatically applies these Chrome settings:
-
-| Setting | Purpose |
-|---|---|
-| `--mute-audio` | Silences Duolingo sound effects |
-| `--disable-notifications` | Blocks browser notification popups |
-| `--window-size=1280,720` | Consistent viewport for element detection |
-| `--no-sandbox` | Compatibility with restricted environments |
-| `--disable-blink-features=AutomationControlled` | Removes automation fingerprint |
-| `user-data-dir=chrome_profile` | Persists session across restarts |
+| `GROQ_API_KEY` | One of two | Groq API key (primary AI) |
+| `GEMINI_API_KEY` | One of two | Google Gemini API key (fallback + vision) |
 
 ---
 
@@ -226,32 +218,42 @@ The agent automatically applies these Chrome settings:
 ```
 Duolingo-agent/
 |
-|-- Duolingo_Agent.py      # Core agent: browser control, AI solving, challenge handling
-|-- .env                   # API keys (not tracked by git)
-|-- .gitignore             # Excludes secrets, cache, and profile data
-|-- chrome_profile/        # Persistent Chrome session data (auto-generated)
-|-- assets/                # README images and visual resources
-|   |-- hero_banner.png
-|   |-- architecture_diagram.png
-|   +-- workflow_demo.png
-+-- README.md              # This file
+|-- duolingo_agent/                 # Core package
+|   |-- __init__.py                 # Package exports
+|   |-- config.py                   # Configuration & env loading
+|   |-- logger.py                   # Colored console logging
+|   |-- browser.py                  # Chrome + anti-detection
+|   |-- challenges.py               # DOM parser & challenge detection
+|   |-- solver.py                   # Dual-AI solver + vision + cache
+|   |-- executor.py                 # Answer submission engine
+|   +-- agent.py                    # State machine orchestrator
+|
+|-- main.py                         # CLI entry point
+|-- requirements.txt                # Python dependencies
+|-- .env.example                    # API key template
+|-- .env                            # Your API keys (git-ignored)
+|-- .gitignore                      # Git exclusions
+|-- chrome_profile/                 # Persistent session (auto-generated)
+|-- correction_cache.json           # Learned corrections (auto-generated)
+|-- assets/                         # README visuals
++-- README.md                       # This file
 ```
 
 ---
 
-## Challenge Types Explained
+## Challenge Types
 
-### Multiple Choice (MCQ)
-The AI selects the correct option from a list. The agent matches the AI's answer against visible option text using exact and partial word matching as a fallback.
-
-### Word Bank
-The AI returns an ordered list of tiles to tap. Each tile is matched by exact text against available `challenge-tap-token` buttons and clicked in sequence.
-
-### Typing
-The AI generates the translated text. The agent clears the input field with `Ctrl+A > Delete` and types the answer directly.
-
-### Match Pairs
-The AI returns pairs of matching tokens (e.g., a word and its translation). The agent clicks each pair in sequence with a short delay between clicks.
+| Type | Detection | Solving Method |
+|---|---|---|
+| Multiple Choice | `challenge-choice`, `role="radio"` | AI selects option, 3-pass matching |
+| Word Bank | `challenge-tap-token` (outside match) | AI orders tiles, sequential tapping |
+| Typing / Translation | `challenge-translate-input` textarea | AI translates, types into field |
+| Match Pairs | `challenge-match` context | AI pairs tokens, clicks in sequence |
+| Fill in the Blank | `completeReverseTranslation` | AI fills missing word |
+| Tap to Complete | `tapComplete` | AI selects completion token |
+| Listening | `challenge-listen` | Auto-skip or solve if typing input present |
+| Speaking | `challenge-speak` | Auto-skip via "Can't speak now" |
+| Character Select | `characterSelect` | AI selects correct character |
 
 ---
 
@@ -259,31 +261,30 @@ The AI returns pairs of matching tokens (e.g., a word and its translation). The 
 
 | Problem | Solution |
 |---|---|
-| `ChromeDriver version mismatch` | The agent uses `webdriver-manager` to auto-download the correct version. Ensure Chrome is up to date. |
-| `Rate limit hit (429)` | The agent automatically pauses and retries. If persistent, add both API keys for failover. |
-| `Browser was closed or disconnected` | The agent detects this and exits gracefully. Restart the script. |
-| `Failed to start a lesson automatically` | Click the lesson manually in the browser. The agent will detect the lesson URL and take over. |
-| `Login not persisting` | Ensure `chrome_profile/` is not in `.gitignore` deletions and is writable. |
+| `ModuleNotFoundError` | Run `pip install -r requirements.txt` inside your virtual environment |
+| `ChromeDriver version mismatch` | Update Chrome. `webdriver-manager` auto-downloads the correct driver. |
+| `Rate limit (429)` | The agent auto-pauses and retries. Add both API keys for failover. |
+| `Browser disconnected` | Agent detects this and exits gracefully. Restart with `python main.py`. |
+| `Can't start lesson automatically` | Click the lesson manually. The agent detects the URL change and takes over. |
+| `Wrong answers` | The correction cache (`correction_cache.json`) learns from mistakes over time. |
 
 ---
 
 ## Disclaimer
 
-> This project is built for **educational and research purposes only**. It demonstrates browser automation techniques combined with large language model integration. Use responsibly and in accordance with Duolingo's Terms of Service. The authors are not responsible for any consequences arising from the use of this software.
+> This project is for **educational and research purposes only**. It demonstrates browser automation combined with large language model integration. Use responsibly and in accordance with Duolingo's Terms of Service. The authors are not responsible for any consequences arising from usage of this software.
 
 ---
 
 ## Contributing
 
-Contributions are welcome. To get started:
+Contributions are welcome.
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/your-feature`
 3. Commit your changes: `git commit -m "Add your feature"`
 4. Push to the branch: `git push origin feature/your-feature`
 5. Open a Pull Request
-
-Please ensure your code follows the existing style and includes appropriate error handling.
 
 ---
 
