@@ -7,3 +7,7 @@ browser/
 dashboard/static/
 .env
 chrome_profile/
+*.egg-info/
+dist/
+build/
+correction_cache.json
