@@ -54,6 +54,7 @@ class DuolingoAgent:
         self._last_fingerprint = None
         self._consecutive_failures = 0
         self._stuck_counter = 0
+        self._current_challenge_type = None
 
     # ------------------------------------------------------------------
     # Main loop
@@ -239,10 +240,12 @@ class DuolingoAgent:
 
     def _handle_lesson_start(self):
         """Transition: lesson page loaded, prepare for challenges."""
-        self.log.info("Lesson started!")
+        self.lessons_completed += 0  # don't increment yet
+        self.log.lesson_start(self.lessons_completed + 1)
         self._last_fingerprint = None
         self._consecutive_failures = 0
         self._stuck_counter = 0
+        self._current_challenge_type = None
         time.sleep(1)
         self.state = State.CHALLENGE
 
@@ -296,6 +299,7 @@ class DuolingoAgent:
                 return
 
         # Log the challenge
+        self._current_challenge_type = data.challenge_type
         self.log.challenge(data.challenge_type, str(data))
 
         # Skip type
@@ -352,8 +356,12 @@ class DuolingoAgent:
             self.log.warn(f"Wrong answer! Correct: {correction}")
             self.solver.learn_correction(self._last_fingerprint, correction)
             self.log.failed()
+            if self._current_challenge_type:
+                self.log.track_type_result(self._current_challenge_type, False)
         else:
             self.log.solved()
+            if self._current_challenge_type:
+                self.log.track_type_result(self._current_challenge_type, True)
 
         # Click Continue / Next
         self.executor.click_continue()
@@ -367,9 +375,9 @@ class DuolingoAgent:
 
     def _handle_lesson_end(self):
         """Lesson completed. Handle XP summary and decide whether to continue."""
-        self.log.success("Lesson complete!")
         self.log.lesson_done()
         self.lessons_completed += 1
+        self.log.lesson_complete_celebration(self.lessons_completed)
 
         # Handle XP summary screen
         time.sleep(1)
