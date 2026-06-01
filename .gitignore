@@ -11,3 +11,9 @@ chrome_profile/
 dist/
 build/
 correction_cache.json
+*.log
+activity.log
+today_activity.log
+.gemini/
+.vscode/
+.idea/
