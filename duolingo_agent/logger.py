@@ -5,9 +5,18 @@ Features ASCII art banner, emoji indicators, progress bars, and a session dashbo
 """
 
 import sys
+import os
 import time
 import threading
 from datetime import datetime, timedelta
+
+# Force UTF-8 output on Windows to support box-drawing characters and emojis
+if sys.platform == "win32":
+    os.system("")  # Enable ANSI escape codes on Windows
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 
 class Colors:
