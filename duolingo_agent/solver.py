@@ -68,6 +68,7 @@ class Solver:
         # Step 1: Check cache
         cached = self._check_cache(challenge_data.fingerprint)
         if cached is not None:
+            self.log.ai_tier("cache")
             self.log.debug("Cache hit -- using stored correction.")
             return cached
 
@@ -186,14 +187,19 @@ class Solver:
     def _call_groq(self, prompt: str) -> Optional[dict]:
         """Call Groq API with structured JSON output."""
         try:
+            _start = time.time()
             response = self.groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.config.groq_model,
                 temperature=self.config.ai_temperature,
                 response_format={"type": "json_object"},
             )
+            elapsed_ms = int((time.time() - _start) * 1000)
             raw = response.choices[0].message.content.strip()
-            return self._parse_json(raw)
+            result = self._parse_json(raw)
+            if result:
+                self.log.ai_tier("groq", elapsed_ms)
+            return result
 
         except Exception as e:
             error_str = str(e)
@@ -207,12 +213,17 @@ class Solver:
     def _call_gemini(self, prompt: str) -> Optional[dict]:
         """Call Gemini API for text-based solving."""
         try:
+            _start = time.time()
             response = self.gemini_client.models.generate_content(
                 model=self.config.gemini_model,
                 contents=prompt,
             )
+            elapsed_ms = int((time.time() - _start) * 1000)
             raw = response.text.strip()
-            return self._parse_json(raw)
+            result = self._parse_json(raw)
+            if result:
+                self.log.ai_tier("gemini", elapsed_ms)
+            return result
 
         except Exception as e:
             error_str = str(e)
@@ -251,6 +262,7 @@ class Solver:
         try:
             from google.genai import types as genai_types
 
+            _start = time.time()
             image_part = genai_types.Part.from_bytes(
                 data=base64.b64decode(screenshot_b64),
                 mime_type="image/png",
@@ -260,9 +272,11 @@ class Solver:
                 model=self.config.gemini_model,
                 contents=[prompt, image_part],
             )
+            elapsed_ms = int((time.time() - _start) * 1000)
             raw = response.text.strip()
             result = self._parse_json(raw)
             if result:
+                self.log.ai_tier("vision", elapsed_ms)
                 self.log.success("Vision fallback solved the challenge!")
             return result
 

@@ -86,7 +86,7 @@ class Executor:
             opt_text = self._get_option_text(opt)
             if opt_text == answer_clean:
                 if self.browser.safe_click(opt):
-                    self.log.success(f"Selected: {opt_text}")
+                    self.log.match_confidence("exact", opt_text)
                     time.sleep(self.config.delay_between_actions)
                     return True
 
@@ -95,7 +95,7 @@ class Executor:
             opt_text = self._get_option_text(opt)
             if opt_text and (answer_clean in opt_text or opt_text in answer_clean):
                 if self.browser.safe_click(opt):
-                    self.log.success(f"Selected (substring): {opt_text}")
+                    self.log.match_confidence("substring", opt_text)
                     time.sleep(self.config.delay_between_actions)
                     return True
 
@@ -115,7 +115,7 @@ class Executor:
                     best_match = opt
             if best_match and best_overlap > 0:
                 if self.browser.safe_click(best_match):
-                    self.log.success(f"Selected (word overlap): {self._get_option_text(best_match)}")
+                    self.log.match_confidence("overlap", self._get_option_text(best_match))
                     time.sleep(self.config.delay_between_actions)
                     return True
 
