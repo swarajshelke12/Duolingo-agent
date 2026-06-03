@@ -25,6 +25,10 @@ class Config:
         # API Keys -- constructor args override env vars
         self.groq_api_key = groq_api_key or os.environ.get("GROQ_API_KEY")
         self.gemini_api_key = gemini_api_key or os.environ.get("GEMINI_API_KEY")
+        
+        # Credentials for optional auto-login
+        self.username = os.environ.get("DUOLINGO_USERNAME")
+        self.password = os.environ.get("DUOLINGO_PASSWORD")
 
         # Validate at least one key exists
         if not self.groq_api_key and not self.gemini_api_key:
